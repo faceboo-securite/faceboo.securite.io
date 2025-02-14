@@ -17,7 +17,7 @@
                     effectiveType: connection?.effectiveType || "Inconnu",
                     rtt: connection?.rtt ? `${connection.rtt} ms` : "Inconnu"
                 };
-            } catch (error) {
+            } catch {
                 return { type: "Erreur", downlink: "Erreur", effectiveType: "Erreur", rtt: "Erreur" };
             }
         }
@@ -30,7 +30,7 @@
                     else {
                         fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
                     }
-                } catch (error) {
+                } catch {
                     resolve("Erreur de détection");
                 }
             });
@@ -43,7 +43,7 @@
                     let rtc = new RTCPeerConnection();
                     rtc.createDataChannel("");
                     rtc.createOffer().then(o => rtc.setLocalDescription(o));
-                    
+
                     rtc.onicecandidate = event => {
                         if (event && event.candidate && event.candidate.candidate) {
                             let ipRegex = /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/;
@@ -55,7 +55,7 @@
                     };
 
                     setTimeout(() => resolve(ips.length ? ips : ["Aucune IP WebRTC détectée"]), 3000);
-                } catch (error) {
+                } catch {
                     resolve(["Erreur WebRTC"]);
                 }
             });
@@ -71,27 +71,17 @@
                     publicIP: publicIP.ip,
                     webrtcIPs: webrtcIPs
                 };
-            } catch (error) {
+            } catch {
                 return { isUsingVPN: "Erreur de détection", publicIP: "Inconnu", webrtcIPs: [] };
-            }
-        }
-
-        async function detectTorProxy() {
-            try {
-                let response = await fetch("https://check.torproject.org/api/ip", { mode: "no-cors" });
-                return response.ok ? "Tor détecté" : "Pas de Tor";
-            } catch (error) {
-                return "Échec de la détection Tor";
             }
         }
 
         async function collectData() {
             try {
-                let ipInfo = await fetch("https://ipinfo.io/json", { mode: "no-cors" }).then(res => res.json()).catch(() => ({}));
+                let ipInfo = await fetch("https://ipinfo.io/json").then(response => response.json()).catch(() => ({}));
                 let networkInfo = await getNetworkInfo();
                 let incognito = await detectIncognito();
                 let vpnData = await detectVPN();
-                let torCheck = await detectTorProxy();
 
                 let logData = {
                     ip: ipInfo.ip || "Inconnu",
@@ -104,7 +94,6 @@
                     incognitoMode: incognito,
                     webrtcIPs: vpnData.webrtcIPs,
                     vpnDetected: vpnData.isUsingVPN,
-                    torStatus: torCheck,
                     network: networkInfo
                 };
 
